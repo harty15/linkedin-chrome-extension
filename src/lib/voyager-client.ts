@@ -22,9 +22,14 @@ const ENDPOINTS = {
   PROFILE: '/identity/dash/profiles',
 };
 
-// Decoration ID for connections with profile data
-const CONNECTIONS_DECORATION_ID = 
+// Decoration IDs for connections with varying levels of profile data
+// Higher numbers = more data, but might be rate-limited more aggressively
+const CONNECTIONS_DECORATION_ID =
   'com.linkedin.voyager.dash.deco.web.mynetwork.ConnectionListWithProfile-16';
+
+// Alternative decoration ID with more profile details (use if available)
+const CONNECTIONS_DECORATION_ID_RICH =
+  'com.linkedin.voyager.dash.deco.web.mynetwork.ConnectionListWithProfile-20';
 
 // Rate limiting configuration (from Harmonic)
 const RATE_LIMIT = {

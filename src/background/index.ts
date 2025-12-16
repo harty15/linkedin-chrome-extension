@@ -224,8 +224,12 @@ async function runSync(type: SyncType): Promise<{ success: boolean; count: numbe
       const result = await apiClient.bulkImportContacts(contacts as any);
       logger.info(`Saved: ${result.new_count} new, ${result.updated_count} updated`);
 
-      // Auto-enrich ALL contacts (every sync enriches all fetched profiles)
-      logger.info(`Starting automatic enrichment for ${connections.length} contacts`);
+      // DISABLED: Auto-enrichment causes LinkedIn 410 errors
+      // Enrichment should be done manually or in small batches to avoid detection
+      const ENABLE_AUTO_ENRICHMENT = false; // Set to true to enable (not recommended)
+
+      if (ENABLE_AUTO_ENRICHMENT) {
+        logger.info(`Starting automatic enrichment for ${connections.length} contacts`);
 
       // Extract identifiers from all connections
       const identifiers: string[] = [];
@@ -373,6 +377,9 @@ async function runSync(type: SyncType): Promise<{ success: boolean; count: numbe
         );
 
         logger.info(`Auto-enrichment complete: ${enrichedCount}/${identifiers.length} profiles enriched`);
+      }
+      } else {
+        logger.info('Auto-enrichment disabled - use manual enrichment for specific contacts');
       }
     }
 
