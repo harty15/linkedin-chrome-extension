@@ -260,17 +260,23 @@ async function runSync(type: SyncType): Promise<{ success: boolean; count: numbe
                   fullProfileToEnrichedContact(profile, conn.linkedinUrl);
 
                 // Update contact
-                const { data: contactData } = await supabase
+                const { data: contactData, error: contactLookupError } = await supabase
                   .from('contacts')
                   .select('id')
                   .eq('linkedin_url', conn.linkedinUrl)
                   .single();
 
+                if (contactLookupError) {
+                  logger.error(`Failed to find contact for ${conn.linkedinUrl}:`, contactLookupError);
+                  return;
+                }
+
                 if (contactData) {
                   const contactId = contactData.id;
+                  logger.debug(`Enriching contact ${contactId}: ${enrichedContact.name}`);
 
                   // Update contact with enriched data (always overwrite)
-                  await supabase
+                  const { error: updateError } = await supabase
                     .from('contacts')
                     .update({
                       ...enrichedContact,
@@ -278,33 +284,52 @@ async function runSync(type: SyncType): Promise<{ success: boolean; count: numbe
                     })
                     .eq('id', contactId);
 
+                  if (updateError) {
+                    logger.error(`Failed to update contact ${contactId}:`, updateError);
+                  }
+
                   // Delete old experiences and insert fresh data
                   await supabase.from('experiences').delete().eq('contact_id', contactId);
                   if (experiences.length > 0) {
-                    await supabase.from('experiences').insert(
+                    const { error: expError } = await supabase.from('experiences').insert(
                       experiences.map(e => ({ ...e, contact_id: contactId }))
                     );
+                    if (expError) {
+                      logger.error(`Failed to insert experiences for ${contactId}:`, expError);
+                    } else {
+                      logger.debug(`Inserted ${experiences.length} experiences for ${contactId}`);
+                    }
                   }
 
                   // Delete old educations and insert fresh data
                   await supabase.from('educations').delete().eq('contact_id', contactId);
                   if (educations.length > 0) {
-                    await supabase.from('educations').insert(
+                    const { error: eduError } = await supabase.from('educations').insert(
                       educations.map(e => ({ ...e, contact_id: contactId }))
                     );
+                    if (eduError) {
+                      logger.error(`Failed to insert educations for ${contactId}:`, eduError);
+                    } else {
+                      logger.debug(`Inserted ${educations.length} educations for ${contactId}`);
+                    }
                   }
 
                   // Delete old skills and insert fresh data
                   await supabase.from('skills').delete().eq('contact_id', contactId);
                   if (skills.length > 0) {
-                    await supabase.from('skills').insert(
+                    const { error: skillError } = await supabase.from('skills').insert(
                       skills.map(s => ({ ...s, contact_id: contactId }))
                     );
+                    if (skillError) {
+                      logger.error(`Failed to insert skills for ${contactId}:`, skillError);
+                    } else {
+                      logger.debug(`Inserted ${skills.length} skills for ${contactId}`);
+                    }
                   }
 
                   // Update linkedin_profiles (upsert overwrites)
                   const nameParts = enrichedContact.name.split(' ');
-                  await supabase
+                  const { error: profileError } = await supabase
                     .from('linkedin_profiles')
                     .upsert({
                       contact_id: contactId,
@@ -326,7 +351,12 @@ async function runSync(type: SyncType): Promise<{ success: boolean; count: numbe
                       updated_at: new Date().toISOString(),
                     }, { onConflict: 'linkedin_url' });
 
+                  if (profileError) {
+                    logger.error(`Failed to upsert linkedin_profiles for ${contactId}:`, profileError);
+                  }
+
                   enrichedCount++;
+                  logger.info(`Successfully enriched ${enrichedCount}/${identifiers.length}: ${enrichedContact.name}`);
                 }
               }
             }
