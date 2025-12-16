@@ -120,33 +120,45 @@ async function fetchWithRetry(
   retries = RATE_LIMIT.MAX_RETRIES
 ): Promise<Response> {
   let lastError: Error | null = null;
-  
+
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const response = await fetch(url, options);
-      
+
       if (response.status === 429) {
-        // Rate limited - wait and retry
-        logger.warn(`Rate limited, attempt ${attempt + 1}/${retries}`);
-        await sleep(RATE_LIMIT.RETRY_DELAY_MS * (attempt + 1));
+        // Rate limited - wait and retry with exponential backoff
+        const backoffMs = RATE_LIMIT.RETRY_DELAY_MS * Math.pow(2, attempt);
+        logger.warn(`Rate limited (429), waiting ${backoffMs}ms before retry ${attempt + 1}/${retries}`);
+        await sleep(backoffMs);
         continue;
       }
-      
+
+      if (response.status === 410) {
+        // Gone - profile unavailable or blocked, don't retry
+        throw new Error(`HTTP 410: Profile unavailable or access blocked`);
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
+
       return response;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Don't retry on 410 or 403 (blocked/forbidden)
+      if (lastError.message.includes('410') || lastError.message.includes('403')) {
+        throw lastError;
+      }
+
       logger.warn(`Request failed, attempt ${attempt + 1}/${retries}:`, lastError.message);
-      
+
       if (attempt < retries - 1) {
         await sleep(RATE_LIMIT.RETRY_DELAY_MS * (attempt + 1));
       }
     }
   }
-  
+
   throw lastError || new Error('Request failed after retries');
 }
 

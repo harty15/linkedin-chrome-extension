@@ -256,8 +256,9 @@ async function runSync(type: SyncType): Promise<{ success: boolean; count: numbe
               const conn = urlToConnection.get(identifier);
 
               if (conn) {
-                const { contact: enrichedContact, experiences, educations, skills } =
-                  fullProfileToEnrichedContact(profile, conn.linkedinUrl);
+                try {
+                  const { contact: enrichedContact, experiences, educations, skills } =
+                    fullProfileToEnrichedContact(profile, conn.linkedinUrl);
 
                 // Update contact
                 const { data: contactData, error: contactLookupError } = await supabase
@@ -358,10 +359,17 @@ async function runSync(type: SyncType): Promise<{ success: boolean; count: numbe
                   enrichedCount++;
                   logger.info(`Successfully enriched ${enrichedCount}/${identifiers.length}: ${enrichedContact.name}`);
                 }
+                } catch (error) {
+                  logger.error(`Error processing enrichment for ${conn.linkedinUrl}:`, error);
+                }
               }
+            } else {
+              // Profile fetch failed (likely 410 error) - log and continue
+              const identifier = identifiers[completed - 1];
+              logger.warn(`Skipping enrichment for ${identifier} - profile fetch failed`);
             }
           },
-          2000
+          5000 // 5 second delay between profile requests to avoid 410 errors
         );
 
         logger.info(`Auto-enrichment complete: ${enrichedCount}/${identifiers.length} profiles enriched`);
