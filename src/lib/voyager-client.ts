@@ -487,17 +487,22 @@ export async function fetchFullProfile(
 
 /**
  * Fetch main profile view (experience, education, about, etc.)
- * 
- * LinkedIn's profileView endpoint may include experiences/educations
- * in the 'included' array, or they may need to be fetched from
- * separate endpoints like /positions and /educations
+ *
+ * Uses the modern Dash endpoint with decorationId (the old /profileView returns 410)
+ *
+ * As of late 2024/early 2025, LinkedIn requires specific decoration schemas
+ * to fetch profile data. This is their new GraphQL-like REST API.
  */
 async function fetchProfileView(
   publicIdentifier: string,
   headers: LinkedInHeaders
 ): Promise<FullProfileData | null> {
   try {
-    const url = `${VOYAGER_BASE_URL}/identity/profiles/${publicIdentifier}/profileView`;
+    // Modern Dash endpoint with comprehensive decoration schema
+    const decoration = 'com.linkedin.voyager.dash.identity.profile.Profile-(id,publicIdentifier,firstName,lastName,headline,locationName,industryName,summary,occupation,profilePicture,backgroundImage,geoLocationName,industryUrn,*educations*~(schoolName,degreeName,fieldOfStudy,dateRange,school~(name)),*positions*~(companyName,title,description,locationName,dateRange,company~(name)),*skills*~(name))';
+
+    const url = `${VOYAGER_BASE_URL}/identity/dash/profiles?q=memberIdentity&memberIdentity=${publicIdentifier}&decorationId=${encodeURIComponent(decoration)}`;
+
     const response = await fetchWithRetry(url, {
       method: 'GET',
       credentials: 'include',
@@ -541,23 +546,25 @@ async function fetchProfileView(
 
 /**
  * Fetch profile positions/experiences from dedicated endpoint
+ * Uses modern Dash endpoint with decorationId
  */
 async function fetchProfilePositions(
   publicIdentifier: string,
   headers: LinkedInHeaders
 ): Promise<ProfileExperience[]> {
   try {
-    // Try the positions endpoint
-    const url = `${VOYAGER_BASE_URL}/identity/profiles/${publicIdentifier}/positions`;
+    // Modern Dash positions endpoint
+    const decoration = 'com.linkedin.voyager.dash.identity.profile.Position-(companyName,title,description,locationName,dateRange,company~(name))';
+    const url = `${VOYAGER_BASE_URL}/identity/dash/profiles/${publicIdentifier}/positions?decorationId=${encodeURIComponent(decoration)}`;
     const response = await fetchWithRetry(url, {
       method: 'GET',
       credentials: 'include',
       headers: buildRequestHeaders(headers),
     });
     const data = await response.json();
-    
+
     logger.debug(`Positions response for ${publicIdentifier}:`, Object.keys(data));
-    
+
     return parsePositionsResponse(data);
   } catch (error) {
     logger.debug(`Failed to fetch positions for ${publicIdentifier}:`, error);
@@ -567,22 +574,25 @@ async function fetchProfilePositions(
 
 /**
  * Fetch profile educations from dedicated endpoint
+ * Uses modern Dash endpoint with decorationId
  */
 async function fetchProfileEducations(
   publicIdentifier: string,
   headers: LinkedInHeaders
 ): Promise<ProfileEducation[]> {
   try {
-    const url = `${VOYAGER_BASE_URL}/identity/profiles/${publicIdentifier}/educations`;
+    // Modern Dash educations endpoint
+    const decoration = 'com.linkedin.voyager.dash.identity.profile.Education-(schoolName,degreeName,fieldOfStudy,dateRange,school~(name))';
+    const url = `${VOYAGER_BASE_URL}/identity/dash/profiles/${publicIdentifier}/educations?decorationId=${encodeURIComponent(decoration)}`;
     const response = await fetchWithRetry(url, {
       method: 'GET',
       credentials: 'include',
       headers: buildRequestHeaders(headers),
     });
     const data = await response.json();
-    
+
     logger.debug(`Educations response for ${publicIdentifier}:`, Object.keys(data));
-    
+
     return parseEducationsResponse(data);
   } catch (error) {
     logger.debug(`Failed to fetch educations for ${publicIdentifier}:`, error);
